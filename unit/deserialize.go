@@ -43,29 +43,75 @@ var (
 	ErrLineTooLong = fmt.Errorf("line too long (max %d bytes)", SYSTEMD_LINE_MAX)
 )
 
-// Deserialize parses a systemd unit file into a list of UnitOption objects.
+// Deserialize parses a systemd unit file into a list of UnitOptions.
 func Deserialize(f io.Reader) (opts []*UnitOption, err error) {
-	lexer, optchan, errchan := newLexer(f)
-	go lexer.lex()
-
-	for opt := range optchan {
-		opts = append(opts, &(*opt))
-	}
-
-	err = <-errchan
-	return opts, err
+	_, options, err := DeserializeAll(f)
+	return options, err
 }
 
-func newLexer(f io.Reader) (*lexer, <-chan *UnitOption, <-chan error) {
+// DeserializeSections deserializes into a list of UnitSections.
+func DeserializeSections(f io.Reader) ([]*UnitSection, error) {
+	sections, _, err := DeserializeAll(f)
+	return sections, err
+}
+
+// DeserializeAll deserializes into UnitSections and UnitOptions.
+func DeserializeAll(f io.Reader) ([]*UnitSection, []*UnitOption, error) {
+
+	lexer, secchan, optchan, errchan := newLexer(f)
+
+	go lexer.lex()
+
+	sections := []*UnitSection{}
+	options := []*UnitOption{}
+
+	var done bool
+
+	for {
+		select {
+		case opt, ok := <-optchan:
+			if !ok {
+				done = true
+			} else {
+				// add to options
+				options = append(options, &(*opt))
+
+				// add to newest section entries.
+				s := len(sections) - 1
+				sections[s].Entries = append(sections[s].Entries,
+					&UnitEntry{Name: opt.Name, Value: opt.Value})
+			}
+
+		case sec, ok := <-secchan:
+			if !ok {
+				done = true
+			} else {
+				sections = append(sections, sec)
+			}
+		}
+
+		if done {
+			break
+		}
+	}
+
+	err := <-errchan
+
+	return sections, options, err
+}
+
+func newLexer(f io.Reader) (*lexer, <-chan *UnitSection, <-chan *UnitOption, <-chan error) {
 	optchan := make(chan *UnitOption)
+	secchan := make(chan *UnitSection)
 	errchan := make(chan error, 1)
 	buf := bufio.NewReader(f)
 
-	return &lexer{buf, optchan, errchan, ""}, optchan, errchan
+	return &lexer{buf, secchan, optchan, errchan, ""}, secchan, optchan, errchan
 }
 
 type lexer struct {
 	buf     *bufio.Reader
+	secchan chan *UnitSection
 	optchan chan *UnitOption
 	errchan chan error
 	section string
@@ -73,6 +119,7 @@ type lexer struct {
 
 func (l *lexer) lex() {
 	defer func() {
+		close(l.secchan)
 		close(l.optchan)
 		close(l.errchan)
 	}()
@@ -125,6 +172,8 @@ func (l *lexer) lexSectionSuffixFunc(section string) lexStep {
 		if len(garbage) > 0 {
 			return nil, fmt.Errorf("found garbage after section name %s: %v", l.section, garbage)
 		}
+
+		l.secchan <- &UnitSection{Section: section, Entries: []*UnitEntry{}}
 
 		return l.lexNextSectionOrOptionFunc(section), nil
 	}

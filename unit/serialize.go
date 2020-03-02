@@ -58,6 +58,31 @@ func Serialize(opts []*UnitOption) io.Reader {
 	return &buf
 }
 
+func SerializeSections(sections []*UnitSection) io.Reader {
+
+	var buf bytes.Buffer
+
+	if len(sections) == 0 {
+		return &buf
+	}
+
+	for i, s := range sections {
+		writeSectionHeader(&buf, s.Section)
+		writeNewline(&buf)
+
+		for _, e := range s.Entries {
+			writeOption(&buf, &UnitOption{s.Section, e.Name, e.Value})
+			writeNewline(&buf)
+		}
+
+		if i < len(sections)-1 {
+			writeNewline(&buf)
+		}
+	}
+
+	return &buf
+}
+
 func writeNewline(buf *bytes.Buffer) {
 	buf.WriteRune('\n')
 }

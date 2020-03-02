@@ -322,7 +322,7 @@ o
 				},
 			},
 			`[Route]
-Gateway=10.0.10.2
+Gateway=10.0.10.1
 Destination=10.0.1.1/24
 
 [Route]

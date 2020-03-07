@@ -14,8 +14,6 @@
 
 package unit
 
-import ()
-
 // UnitEntry is a single line entry in a Unit file.
 type UnitEntry struct {
 	Name  string

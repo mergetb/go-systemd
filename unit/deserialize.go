@@ -55,43 +55,54 @@ func DeserializeSections(f io.Reader) ([]*UnitSection, error) {
 	return sections, err
 }
 
+type lexDataType int
+
+const (
+	SEC lexDataType = iota
+	OPT
+)
+
+// lexChanData - support either datatype in the lex channel.
+// Poor man's union data type.
+type lexData struct {
+	Type    lexDataType
+	Option  *UnitOption
+	Section *UnitSection
+}
+
 // DeserializeAll deserializes into UnitSections and UnitOptions.
 func DeserializeAll(f io.Reader) ([]*UnitSection, []*UnitOption, error) {
 
-	lexer, secchan, optchan, errchan := newLexer(f)
+	lexer, lexchan, errchan := newLexer(f)
 
 	go lexer.lex()
 
 	sections := []*UnitSection{}
 	options := []*UnitOption{}
 
-	var done bool
-
-	for {
-		select {
-		case opt, ok := <-optchan:
-			if !ok {
-				done = true
-			} else {
+	for ld := range lexchan {
+		switch ld.Type {
+		case OPT:
+			if ld.Option != nil {
 				// add to options
+				opt := ld.Option
 				options = append(options, &(*opt))
+
+				// sanity check. "should not happen" as SEC is first in code flow.
+				if len(sections) == 0 {
+					// log error.
+					break
+				}
 
 				// add to newest section entries.
 				s := len(sections) - 1
 				sections[s].Entries = append(sections[s].Entries,
 					&UnitEntry{Name: opt.Name, Value: opt.Value})
 			}
-
-		case sec, ok := <-secchan:
-			if !ok {
-				done = true
-			} else {
-				sections = append(sections, sec)
+		case SEC:
+			if ld.Section != nil {
+				sections = append(sections, ld.Section)
 			}
-		}
-
-		if done {
-			break
 		}
 	}
 
@@ -100,27 +111,24 @@ func DeserializeAll(f io.Reader) ([]*UnitSection, []*UnitOption, error) {
 	return sections, options, err
 }
 
-func newLexer(f io.Reader) (*lexer, <-chan *UnitSection, <-chan *UnitOption, <-chan error) {
-	optchan := make(chan *UnitOption)
-	secchan := make(chan *UnitSection)
+func newLexer(f io.Reader) (*lexer, <-chan *lexData, <-chan error) {
+	lexchan := make(chan *lexData)
 	errchan := make(chan error, 1)
 	buf := bufio.NewReader(f)
 
-	return &lexer{buf, secchan, optchan, errchan, ""}, secchan, optchan, errchan
+	return &lexer{buf, lexchan, errchan, ""}, lexchan, errchan
 }
 
 type lexer struct {
 	buf     *bufio.Reader
-	secchan chan *UnitSection
-	optchan chan *UnitOption
+	lexchan chan *lexData
 	errchan chan error
 	section string
 }
 
 func (l *lexer) lex() {
 	defer func() {
-		close(l.secchan)
-		close(l.optchan)
+		close(l.lexchan)
 		close(l.errchan)
 	}()
 	next := l.lexNextSection
@@ -173,7 +181,11 @@ func (l *lexer) lexSectionSuffixFunc(section string) lexStep {
 			return nil, fmt.Errorf("found garbage after section name %s: %v", l.section, garbage)
 		}
 
-		l.secchan <- &UnitSection{Section: section, Entries: []*UnitEntry{}}
+		l.lexchan <- &lexData{
+			Type:    SEC,
+			Section: &UnitSection{Section: section, Entries: []*UnitEntry{}},
+			Option:  nil,
+		}
 
 		return l.lexNextSectionOrOptionFunc(section), nil
 	}
@@ -301,7 +313,11 @@ func (l *lexer) lexOptionValueFunc(section, name string, partial bytes.Buffer) l
 		} else {
 			val = strings.TrimSpace(val)
 		}
-		l.optchan <- &UnitOption{Section: section, Name: name, Value: val}
+		l.lexchan <- &lexData{
+			Type:    OPT,
+			Section: nil,
+			Option:  &UnitOption{Section: section, Name: name, Value: val},
+		}
 
 		return l.lexNextSectionOrOptionFunc(section), nil
 	}

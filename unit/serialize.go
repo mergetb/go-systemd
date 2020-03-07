@@ -58,13 +58,11 @@ func Serialize(opts []*UnitOption) io.Reader {
 	return &buf
 }
 
+// SerializeSections will serializes the unit file from the given
+// UnitSections.
 func SerializeSections(sections []*UnitSection) io.Reader {
 
 	var buf bytes.Buffer
-
-	if len(sections) == 0 {
-		return &buf
-	}
 
 	for i, s := range sections {
 		writeSectionHeader(&buf, s.Section)

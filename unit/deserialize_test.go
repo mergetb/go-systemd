@@ -277,7 +277,7 @@ Option=value
 	}
 
 	for i, tt := range tests {
-		output, err := Deserialize(bytes.NewReader(tt.input))
+		output, err := DeserializeOptions(bytes.NewReader(tt.input))
 		if err != nil {
 			t.Errorf("case %d: unexpected error parsing unit: %v", i, err)
 			continue
@@ -408,7 +408,7 @@ Description=Foo
 	}
 
 	for i, tt := range tests {
-		output, err := Deserialize(bytes.NewReader(tt))
+		output, err := DeserializeOptions(bytes.NewReader(tt))
 		if err == nil {
 			t.Errorf("case %d: unexpected nil error", i)
 			t.Log("Output:")
@@ -460,7 +460,7 @@ ExecStartExecStartExecStartExecStartExecStartExecStartExecStartExecStartExecStar
 	}
 
 	for i, tt := range tests {
-		output, err := Deserialize(bytes.NewReader(tt))
+		output, err := DeserializeOptions(bytes.NewReader(tt))
 		if err != ErrLineTooLong {
 			t.Errorf("case %d: unexpected err: %v", i, err)
 			t.Log("Output:")

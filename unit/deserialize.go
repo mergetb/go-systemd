@@ -43,16 +43,23 @@ var (
 	ErrLineTooLong = fmt.Errorf("line too long (max %d bytes)", SYSTEMD_LINE_MAX)
 )
 
-// Deserialize parses a systemd unit file into a list of UnitOptions.
-func Deserialize(f io.Reader) (opts []*UnitOption, err error) {
-	_, options, err := DeserializeAll(f)
+// DeserializeOptions parses a systemd unit file into a list of UnitOptions
+func DeserializeOptions(f io.Reader) (opts []*UnitOption, err error) {
+	_, options, err := deserializeAll(f)
 	return options, err
 }
 
 // DeserializeSections deserializes into a list of UnitSections.
 func DeserializeSections(f io.Reader) ([]*UnitSection, error) {
-	sections, _, err := DeserializeAll(f)
+	sections, _, err := deserializeAll(f)
 	return sections, err
+}
+
+// Deserialize parses a systemd unit file into a list of UnitOptions.
+// Note: this function is depreciated in favor of DeserializeOptions
+// and will be removed at a future date.
+func Deserialize(f io.Reader) (opts []*UnitOption, err error) {
+	return DeserializeOptions(f)
 }
 
 type lexDataType int
@@ -70,8 +77,8 @@ type lexData struct {
 	Section *UnitSection
 }
 
-// DeserializeAll deserializes into UnitSections and UnitOptions.
-func DeserializeAll(f io.Reader) ([]*UnitSection, []*UnitOption, error) {
+// deserializeAll deserializes into UnitSections and UnitOptions.
+func deserializeAll(f io.Reader) ([]*UnitSection, []*UnitOption, error) {
 
 	lexer, lexchan, errchan := newLexer(f)
 
@@ -90,8 +97,8 @@ func DeserializeAll(f io.Reader) ([]*UnitSection, []*UnitOption, error) {
 
 				// sanity check. "should not happen" as SEC is first in code flow.
 				if len(sections) == 0 {
-					// log error.
-					break
+					return nil, nil, fmt.Errorf(
+						"Unit file misparse: option before section")
 				}
 
 				// add to newest section entries.

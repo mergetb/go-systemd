@@ -56,7 +56,7 @@ func DeserializeSections(f io.Reader) ([]*UnitSection, error) {
 }
 
 // Deserialize parses a systemd unit file into a list of UnitOptions.
-// Note: this function is depreciated in favor of DeserializeOptions
+// Note: this function is deprecated in favor of DeserializeOptions
 // and will be removed at a future date.
 func Deserialize(f io.Reader) (opts []*UnitOption, err error) {
 	return DeserializeOptions(f)
